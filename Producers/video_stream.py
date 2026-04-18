@@ -18,7 +18,11 @@ while True:
         "confidence": round(random.uniform(0.8, 0.95), 2)
     }
 
-    producer.send("video_stream", data)
-    print("Video sent:", data)
-
+    try:
+        producer.send("video_stream", data)
+        producer.flush()  # Assurez-vous que le message est bien envoyé
+        print("Video sent:", data)
+    except Exception as e:
+        print(f"Error sending message: {e}")
+    
     time.sleep(2)

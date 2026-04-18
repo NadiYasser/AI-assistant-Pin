@@ -12,10 +12,6 @@ services:
     ports:
       - "8080:8080"  # Spark Master UI
       - "7077:7077"  # Spark master listening port
-    volumes:
-      - ./warehouse:/opt/spark/warehouse
-      - ./apps:/opt/spark-apps
-      - ./spark-ivy:/tmp/.ivy
 
   spark-worker:
     image: apache/spark:3.5.1
@@ -29,10 +25,6 @@ services:
 
     depends_on:
       - spark-master
-    volumes:
-      - ./warehouse:/opt/spark/warehouse
-      - ./apps:/opt/spark-apps
-      - ./spark-ivy:/tmp/.ivy
 
   kafka:
     image: apache/kafka:4.0.2

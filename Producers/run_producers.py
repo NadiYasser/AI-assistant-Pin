@@ -2,13 +2,13 @@ import multiprocessing
 import os
 
 def run_video():
-    os.system("python3 Producers/video_stream.py")
+    os.system("python3 video_stream.py")
 
 def run_audio():
-    os.system("python3 Producers/audio_stream.py")
+    os.system("python3 audio_stream.py")
 
 def run_location():
-    os.system("python3 Producers/location_stream.py")
+    os.system("python3 location_stream.py")
 
 if __name__ == "__main__":
     processes = [

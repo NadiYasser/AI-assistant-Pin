@@ -25,6 +25,7 @@ services:
 
     depends_on:
       - spark-master
+    
 
   kafka:
     image: apache/kafka:4.0.2

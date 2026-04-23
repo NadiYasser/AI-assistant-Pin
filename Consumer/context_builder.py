@@ -67,6 +67,25 @@ location_df = location_raw.select(
 ).select("data.*")
 
 # -------------------------------
+# 5. Normalize timestamp (5s bucket)
+# -------------------------------
+def add_bucket(df):
+    return df.withColumn(
+        "ts_bucket",
+        (col("timestamp") - (col("timestamp") % 5))
+    )
+
+video_df = add_bucket(video_df)
+audio_df = add_bucket(audio_df)
+location_df = add_bucket(location_df)
+
+# -------------------------------
+# 6. Add Watermarks (handle late data)
+# -------------------------------
+video_df = video_df.withWatermark("ts_bucket", "10 seconds")
+audio_df = audio_df.withWatermark("ts_bucket", "10 seconds")
+location_df = location_df.withWatermark("ts_bucket", "10 seconds")
+
 # -------------------------------
 # 7. Alias DataFrames
 # -------------------------------

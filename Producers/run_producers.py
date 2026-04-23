@@ -1,14 +1,28 @@
 import multiprocessing
-import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+PRODUCERS_DIR = Path(__file__).resolve().parent
+
+
+def run_script(script_name):
+    script_path = PRODUCERS_DIR / script_name
+    subprocess.run([sys.executable, str(script_path)], check=False)
+
 
 def run_video():
-    os.system("python3 video_stream.py")
+    run_script("video_stream.py")
+
 
 def run_audio():
-    os.system("python3 audio_stream.py")
+    run_script("audio_stream.py")
+
 
 def run_location():
-    os.system("python3 location_stream.py")
+    run_script("location_stream.py")
+
 
 if __name__ == "__main__":
     processes = [
@@ -17,8 +31,8 @@ if __name__ == "__main__":
         multiprocessing.Process(target=run_location),
     ]
 
-    for p in processes:
-        p.start()
+    for process in processes:
+        process.start()
 
-    for p in processes:
-        p.join()
+    for process in processes:
+        process.join()

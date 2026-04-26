@@ -3,6 +3,7 @@ import json
 import mimetypes
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -17,33 +18,27 @@ MODEL_NAME = "meta-llama/llama-4-scout-17b-16e-instruct"
 TOPIC_NAME = "video_stream"
 POLL_INTERVAL_SECONDS = 15
 VIDEO_SYSTEM_PROMPT = """
-You are a safety-focused vision-language monitoring assistant for child protection.
+You are a visual context extraction assistant for a general-purpose AI assistant.
 
-Your job is to analyze a single image from a child's perspective and identify possible safety risks in the environment.
+Your job is to analyze a single image and produce the single most useful short context summary for a downstream assistant.
 
 PRIMARY OBJECTIVE
-Detect whether there is a prominent danger to a child visible on screen.
+Capture the most relevant immediate visual context from the image for assistant behavior.
 
-WHAT TO WATCH FOR
-- Traffic: cars, motorcycles, bicycles, buses, moving vehicles, road crossing without supervision
-- Heights: stairs, balconies, windows, ledges, climbing furniture, playground fall risks
-- Water: pools, bathtubs, ponds, buckets, open drains, beaches, water edges
-- Fire and heat: stoves, ovens, candles, lighters, matches, hot liquids, heaters, irons
-- Sharp or harmful objects: knives, scissors, glass, tools, needles
-- Choking hazards: small toys, coins, batteries, beads, marbles, plastic bags
-- Electrical risks: exposed outlets, wires, chargers, appliances near water
-- Poisoning hazards: cleaning products, medicines, chemicals, detergents, alcohol
-- Strangulation risks: cords, ropes, blind strings, loose straps
-- Animal threats: aggressive dogs, wild animals, insects in dangerous proximity
-- Human threats: unfamiliar adults acting suspiciously, physical conflict, crowd risk
-- Environmental hazards: smoke, fire, broken glass, unstable furniture, blocked exits
-- Child distress indicators: fallen child, trapped child, panic, disorientation
+PRIORITIZE SIGNALS LIKE
+- Meeting context: people gathered around a table, presentation screens, whiteboards, laptops, note taking
+- Productivity and time cues: clocks, calendars, workstation setup, commuting, waiting areas, transit scenes
+- Hydration and activity cues: water bottles, cups, gym equipment, walking, running, stretching, outdoor movement
+- Contextual question support: objects, signs, labels, screens, rooms, nearby tools, visible tasks
+- Environment classification: office, home, cafe, street, store, vehicle, gym, classroom
+- Important visible changes: crowding, interruptions, device use, food, packages, weather conditions
 
 RULES
 - Use only visible evidence
 - Do not invent details
-- Focus on the most prominent child-safety risk in the image
-- If there is no clear danger, say that no immediate child danger is visible
+- Prefer the one detail that would most help an assistant respond intelligently right now
+- Mention a concrete object, activity, or setting when possible
+- If there is no meaningful context, say that no actionable visual context is visible
 - Keep the output concise and specific
 """.strip()
 
@@ -61,9 +56,21 @@ producer = KafkaProducer(
 )
 
 
-def get_15s_timestamp():
-    now = int(time.time())
-    return now - (now % POLL_INTERVAL_SECONDS)
+def get_next_boundary_timestamp():
+    now = time.time()
+    return int(now // POLL_INTERVAL_SECONDS + 1) * POLL_INTERVAL_SECONDS
+
+
+def wait_until(timestamp):
+    delay = timestamp - time.time()
+    if delay > 0:
+        time.sleep(delay)
+
+
+def format_timestamp(timestamp):
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "")
 
 
 def list_image_files():
@@ -96,9 +103,12 @@ def describe_image(image_path):
                 "content": (
                     f"{VIDEO_SYSTEM_PROMPT}\n\n"
                     "Return JSON only with this schema: "
-                    "{\"description\": string, \"confidence\": float}. "
-                    "The description must be one short sentence that states the most prominent danger to a child visible on screen. "
-                    "If no danger is visible, description must say: No immediate child danger visible. "
+                    "{\"objects\": string[], \"scene_description\": string, \"confidence\": float}. "
+                    "The scene_description must be one short sentence that states the most useful actionable context visible on screen. "
+                    "Prefer the detail most relevant to a direct user question or current activity. "
+                    "The objects field must contain 1 to 6 concrete visible objects when possible. "
+                    "If no meaningful context is visible, scene_description must say: No actionable visual context visible. "
+                    "If no clear objects are visible, objects must be an empty array. "
                     "Confidence must be between 0 and 1."
                 ),
             },
@@ -107,7 +117,7 @@ def describe_image(image_path):
                 "content": [
                     {
                         "type": "text",
-                        "text": "Analyze this image for child safety risk and summarize the most prominent visible danger.",
+                        "text": "Analyze this image and summarize the most useful visible context for a general-purpose AI assistant.",
                     },
                     {
                         "type": "image_url",
@@ -122,35 +132,45 @@ def describe_image(image_path):
     parsed = json.loads(content)
 
     return {
-        "description": str(parsed["description"]).strip(),
+        "objects": [
+            str(item).strip()
+            for item in parsed.get("objects", [])
+            if str(item).strip()
+        ],
+        "scene_description": str(parsed["scene_description"]).strip(),
         "confidence": max(0.0, min(1.0, float(parsed["confidence"]))),
     }
 
 
-def build_message(image_path):
+def build_message(image_path, timestamp):
     result = describe_image(image_path)
     return {
-        "type": "video",
-        "timestamp": get_15s_timestamp(),
-        "description": result["description"],
+        "source": "vlm",
+        "timestamp": format_timestamp(timestamp),
+        "objects": result["objects"],
+        "scene_description": result["scene_description"],
         "confidence": result["confidence"],
+        "media_ref": image_path.name,
     }
 
 
 def main():
     image_index = 0
+    next_boundary = get_next_boundary_timestamp()
 
     while True:
         image_files = list_image_files()
         if not image_files:
             print(f"No images found in {VIDEO_DATA_DIR}. Waiting {POLL_INTERVAL_SECONDS}s...")
-            time.sleep(POLL_INTERVAL_SECONDS)
+            wait_until(next_boundary)
+            next_boundary += POLL_INTERVAL_SECONDS
             continue
 
+        wait_until(next_boundary)
         image_path = image_files[image_index % len(image_files)]
 
         try:
-            data = build_message(image_path)
+            data = build_message(image_path, next_boundary)
             producer.send(TOPIC_NAME, data)
             producer.flush()
             print(f"Video sent from {image_path.name}: {data}")
@@ -158,7 +178,7 @@ def main():
             print(f"Error processing {image_path.name}: {exc}")
 
         image_index += 1
-        time.sleep(POLL_INTERVAL_SECONDS)
+        next_boundary += POLL_INTERVAL_SECONDS
 
 
 if __name__ == "__main__":

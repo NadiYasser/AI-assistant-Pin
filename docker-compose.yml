@@ -9,6 +9,8 @@ services:
     container_name: spark-master
     command: >
       bash -c "/opt/spark/sbin/start-master.sh && tail -f /opt/spark/logs/spark--org.apache.spark.deploy.master*.out"
+    volumes:
+      - ./:/opt/spark-apps
     ports:
       - "8080:8080"  # Spark Master UI
       - "7077:7077"  # Spark master listening port
@@ -19,6 +21,8 @@ services:
     hostname: spark-worker
     command: >
       bash -c "/opt/spark/sbin/start-worker.sh spark://spark-master:7077 --cores 2 --memory 2g && tail -f /opt/spark/logs/spark--org.apache.spark.deploy.worker*.out"
+    volumes:
+      - ./:/opt/spark-apps
     ports:
       - "8081:8081"
       - "4040:4040" # spark UI 

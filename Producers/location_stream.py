@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime, timezone
 
 from kafka import KafkaProducer
 
@@ -10,28 +11,56 @@ producer = KafkaProducer(
 )
 
 
-def get_15s_timestamp():
-    now = int(time.time())
-    return now - (now % 15)
+POLL_INTERVAL_SECONDS = 15
+
+
+def get_next_boundary_timestamp():
+    now = time.time()
+    return int(now // POLL_INTERVAL_SECONDS + 1) * POLL_INTERVAL_SECONDS
+
+
+def wait_until(timestamp):
+    delay = timestamp - time.time()
+    if delay > 0:
+        time.sleep(delay)
+
+
+def format_timestamp(timestamp):
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "")
 
 
 locations = [
-    {"raw": [35.7595, -5.8340], "semantic": "home", "confidence": 0.99},
-    {"raw": [35.7712, -5.8124], "semantic": "kindergarten", "confidence": 0.98},
+    {
+        "latitude": 35.7595,
+        "longitude": -5.8340,
+        "place_label": "maison",
+        "zone_type": "domicile",
+    },
+    {
+        "latitude": 35.7712,
+        "longitude": -5.8124,
+        "place_label": "bureau",
+        "zone_type": "travail",
+    },
 ]
 
 
 def main():
     location_index = 0
+    next_boundary = get_next_boundary_timestamp()
 
     while True:
+        wait_until(next_boundary)
         loc = locations[location_index % len(locations)]
         data = {
-            "type": "location",
-            "timestamp": get_15s_timestamp(),
-            "raw": loc["raw"],
-            "semantic": loc["semantic"],
-            "confidence": loc["confidence"],
+            "source": "gps",
+            "timestamp": format_timestamp(next_boundary),
+            "latitude": loc["latitude"],
+            "longitude": loc["longitude"],
+            "place_label": loc["place_label"],
+            "zone_type": loc["zone_type"],
         }
 
         try:
@@ -42,7 +71,7 @@ def main():
             print(f"Error sending location message: {exc}")
 
         location_index += 1
-        time.sleep(15)
+        next_boundary += POLL_INTERVAL_SECONDS
 
 
 if __name__ == "__main__":

@@ -1,0 +1,2 @@
+to run the data producers : python Producers/run_producers.py
+to run the context builder : docker exec -it spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 /opt/spark-apps/Consumer/context_builder.py

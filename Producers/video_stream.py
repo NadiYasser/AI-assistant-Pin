@@ -38,7 +38,7 @@ RULES
 - Do not invent details
 - Prefer the one detail that would most help an assistant respond intelligently right now
 - Mention a concrete object, activity, or setting when possible
-- If there is no meaningful context, say that no actionable visual context is visible
+- If there is no meaningful context, describe visual scene as objectively as possible without trying to infer user intent
 - Keep the output concise and specific
 """.strip()
 

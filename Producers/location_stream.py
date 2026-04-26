@@ -35,15 +35,9 @@ locations = [
     {
         "latitude": 35.7595,
         "longitude": -5.8340,
-        "place_label": "maison",
-        "zone_type": "domicile",
-    },
-    {
-        "latitude": 35.7712,
-        "longitude": -5.8124,
-        "place_label": "bureau",
-        "zone_type": "travail",
-    },
+        "place_label": "office",
+        "zone_type": "work",
+    }
 ]
 
 
